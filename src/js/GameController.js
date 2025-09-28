@@ -12,13 +12,26 @@ export default class GameController {
   constructor(gamePlay, stateService) {
     this.gamePlay = gamePlay;
     this.stateService = stateService;
+    this.charactersMap = new Map();
+    this.positionedCharacters = [];
   }
 
   init() {
     // TODO: add event listeners to gamePlay events
     this.gamePlay.drawUi(themes.prairie);
     this.createTeamPositions();
+    this.setupEventListeners();
     // TODO: load saved stated from stateService
+  }
+
+  setupEventListeners() {
+    this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
+    this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
+  }
+
+  formatCharacterInfo(character) {
+    if (!character) return '';
+    return `🎖${character.level} ⚔${character.attack} 🛡${character.defence} ❤${character.health}`.trim();
   }
 
   onCellClick(index) {
@@ -27,10 +40,18 @@ export default class GameController {
 
   onCellEnter(index) {
     // TODO: react to mouse enter
+    const character = this.charactersMap.get(index);
+    if (character) {
+      const info = this.formatCharacterInfo(character);
+      this.gamePlay.showCellTooltip(info, index);
+    } else {
+      this.gamePlay.hideCellTooltip(index);
+    }
   }
 
   onCellLeave(index) {
     // TODO: react to mouse leave
+    this.gamePlay.hideCellTooltip(index);
   }
 
   // Основная функция для создания позиций команд
@@ -46,19 +67,24 @@ export default class GameController {
 
     // Создаем команды с использованием новых названий переменных
     const magicAndSpiritTeam = generateTeam(
-      magicAndSpiritTypes, 1, 4
+      magicAndSpiritTypes,
+      1,
+      4
     ).characters;
     const warriorAndDemonTeam = generateTeam(
-      warriorAndDemonTypes, 1, 4
+      warriorAndDemonTypes,
+      1,
+      4
     ).characters;
 
     const magicAndSpiritTeamPositions = this.getBorderColumnsIndices('first'); // Левая сторона
     const warriorAndDemonTeamPositions = this.getBorderColumnsIndices('last'); // Правая сторона
 
-    this.positionedCharacters = [];
-
     this.assignTeamCharacters(magicAndSpiritTeam, magicAndSpiritTeamPositions);
-    this.assignTeamCharacters(warriorAndDemonTeam, warriorAndDemonTeamPositions);
+    this.assignTeamCharacters(
+      warriorAndDemonTeam,
+      warriorAndDemonTeamPositions
+    );
 
     this.gamePlay.redrawPositions(this.positionedCharacters);
   }
@@ -90,6 +116,7 @@ export default class GameController {
       if (availablePositions.length === 0) break;
       const randIdx = Math.floor(Math.random() * availablePositions.length);
       const position = availablePositions.splice(randIdx, 1)[0];
+      this.charactersMap.set(position, character);
       this.positionedCharacters.push(
         new PositionedCharacter(character, position)
       );
