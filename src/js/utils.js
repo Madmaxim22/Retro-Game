@@ -32,27 +32,27 @@ export function calcTileType(index, boardSize) {
   const isLeft = col === 0;
   const isRight = col === boardSize - 1;
 
-  if (isTop && isLeft) return "top-left";
-  if (isTop && isRight) return "top-right";
-  if (isBottom && isLeft) return "bottom-left";
-  if (isBottom && isRight) return "bottom-right";
+  if (isTop && isLeft) return 'top-left';
+  if (isTop && isRight) return 'top-right';
+  if (isBottom && isLeft) return 'bottom-left';
+  if (isBottom && isRight) return 'bottom-right';
 
-  if (isTop) return "top";
-  if (isBottom) return "bottom";
-  if (isLeft) return "left";
-  if (isRight) return "right";
+  if (isTop) return 'top';
+  if (isBottom) return 'bottom';
+  if (isLeft) return 'left';
+  if (isRight) return 'right';
 
-  return "center";
+  return 'center';
 }
 
 export function calcHealthLevel(health) {
   if (health < 15) {
-    return "critical";
+    return 'critical';
   }
 
   if (health < 50) {
-    return "normal";
+    return 'normal';
   }
 
-  return "high";
+  return 'high';
 }
