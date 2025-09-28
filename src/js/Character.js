@@ -14,11 +14,15 @@
  */
 export default class Character {
   constructor(level, type = 'generic') {
-    this.level = level;
-    this.attack = 0;
-    this.defence = 0;
-    this.health = 50;
-    this.type = type;
+    if (new.target.name != 'Character') {
+      this.level = level;
+      this.attack = 0;
+      this.defence = 0;
+      this.health = 50;
+      this.type = type;
+    } else {
+      throw new Error('The creation of the Character class is prohibited');
+    }
     // TODO: выбросите исключение, если кто-то использует "new Character()"
   }
 }
