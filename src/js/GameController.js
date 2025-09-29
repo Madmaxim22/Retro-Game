@@ -25,8 +25,8 @@ export default class GameController {
   }
 
   setupEventListeners() {
-    this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
-    this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
+    this.gamePlay.addCellEnterListener(this.onCellEnter);
+    this.gamePlay.addCellLeaveListener(this.onCellLeave);
   }
 
   formatCharacterInfo(character) {
@@ -38,7 +38,7 @@ export default class GameController {
     // TODO: react to click
   }
 
-  onCellEnter(index) {
+  onCellEnter = (index) => {
     // TODO: react to mouse enter
     const character = this.charactersMap.get(index);
     if (character) {
@@ -49,7 +49,7 @@ export default class GameController {
     }
   }
 
-  onCellLeave(index) {
+  onCellLeave = (index) => {
     // TODO: react to mouse leave
     this.gamePlay.hideCellTooltip(index);
   }
