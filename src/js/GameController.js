@@ -1,47 +1,287 @@
-import themes from "./themes";
-import cursors from "./cursors";
-import Bowman from "./characters/Bowman";
-import Vampire from "./characters/Vampire";
-import Undead from "./characters/Undead";
-import Magician from "./characters/Magician";
-import Daemon from "./characters/Daemon";
-import Swordsman from "./characters/Swordsman";
-import { generateTeam } from "./generators";
-import PositionedCharacter from "./PositionedCharacter";
-import GamePlay from "./GamePlay";
-import GameState from "./GameState";
+import themes from './themes';
+import cursors from './cursors';
+import Bowman from './characters/Bowman';
+import Vampire from './characters/Vampire';
+import Undead from './characters/Undead';
+import Magician from './characters/Magician';
+import Daemon from './characters/Daemon';
+import Swordsman from './characters/Swordsman';
+import { generateTeam } from './generators';
+import PositionedCharacter from './PositionedCharacter';
+import GamePlay from './GamePlay';
+import GameState from './GameState';
 
-// Команда игрока
-const playersTypes = [Bowman, Swordsman, Magician];
-// Команда противника
-const opponentTypes = [Daemon, Undead, Vampire];
+// Константы для команд
+const TEAM_PLAYER = 'player';
+const TEAM_COMPUTER = 'computer';
+
+// Константы для типов действий
+const ACTION_ATTACK = 'attack';
+const ACTION_MOVE = 'move';
+
+const RANGE_MAP = {
+  Swordsman: {
+    move: 4, attack: 1
+  },
+  Undead: {
+    move: 4, attack: 1
+  },
+  Bowman: {
+    move: 2, attack: 2
+  },
+  Vampire: {
+    move: 2, attack: 2
+  },
+  Magician: {
+    move: 1, attack: 4
+  },
+  Daemon: {
+    move: 1, attack: 4
+  }
+};
+
+class PositionCalculator {
+  constructor(boardSize, characterManager) {
+    this.boardSize = boardSize;
+    this.characterManager = characterManager;
+  }
+
+  calculateDistance(fromIndex, toIndex) {
+    const fromRow = Math.floor(fromIndex / this.boardSize);
+    const fromCol = fromIndex % this.boardSize;
+    const toRow = Math.floor(toIndex / this.boardSize);
+    const toCol = toIndex % this.boardSize;
+    return Math.max(Math.abs(fromRow - toRow), Math.abs(fromCol - toCol));
+  }
+
+  getBorderColumnsIndices(side = 'first') {
+    const indices = [];
+    const isFirstColumn = side === 'first';
+
+    for (let row = 0; row < this.boardSize; row++) {
+      const baseIndex = row * this.boardSize;
+      indices.push(
+        baseIndex + (isFirstColumn ? 0 : this.boardSize - 2),
+        baseIndex + (isFirstColumn ? 1 : this.boardSize - 1)
+      );
+    }
+    return indices;
+  }
+
+  calculateNextPosition(fromIndex, toIndex, moveRange) {
+    const fromRow = Math.floor(fromIndex / this.boardSize);
+    const fromCol = fromIndex % this.boardSize;
+    const toRow = Math.floor(toIndex / this.boardSize);
+    const toCol = toIndex % this.boardSize;
+
+    const deltaRow = toRow - fromRow;
+    const deltaCol = toCol - fromCol;
+
+    const distance = Math.max(Math.abs(deltaRow), Math.abs(deltaCol));
+    if (distance === 0) return fromIndex;
+
+    // Пробуем разные варианты шагов, начиная с максимально возможного
+    for (let step = Math.min(moveRange, distance); step > 0; step--) {
+      const stepRow = Math.round((deltaRow / distance) * step);
+      const stepCol = Math.round((deltaCol / distance) * step);
+
+      const newRow = Math.max(0, Math.min(this.boardSize - 1, fromRow + stepRow));
+      const newCol = Math.max(0, Math.min(this.boardSize - 1, fromCol + stepCol));
+
+      const newIndex = newRow * this.boardSize + newCol;
+
+      // Проверяем, что позиция свободна и не является исходной
+      if (newIndex !== fromIndex && !this.characterManager.isPositionOccupied(newIndex)) {
+        return newIndex;
+      }
+    }
+
+    // Если не нашли подходящую позицию, остаемся на месте
+    return fromIndex;
+  }
+}
+
+class CharacterManager {
+  constructor() {
+    this.charactersMap = new Map();
+    this.positionedCharacters = [];
+  }
+
+  addCharacter(character, position) {
+    this.charactersMap.set(position, character);
+    this.positionedCharacters.push(new PositionedCharacter(character, position));
+  }
+
+  removeCharacter(position) {
+    this.charactersMap.delete(position);
+    this.positionedCharacters = this.positionedCharacters.filter(
+      posChar => posChar.position !== position
+    );
+  }
+
+  moveCharacter(fromIndex, toIndex) {
+    const characterPos = this.positionedCharacters.find(
+      posChar => posChar.position === fromIndex
+    );
+
+    if (!characterPos) return false;
+
+    this.charactersMap.delete(fromIndex);
+    this.charactersMap.set(toIndex, characterPos.character);
+    characterPos.position = toIndex;
+    return true;
+  }
+
+  getCharacterAt(position) {
+    return this.charactersMap.get(position);
+  }
+
+  isPositionOccupied(position) {
+    return this.charactersMap.has(position);
+  }
+
+  getCharactersByTeam(playerTypes, opponentTypes) {
+    return {
+      player: this.positionedCharacters.filter(pc =>
+        playerTypes.some(type => pc.character instanceof type)
+      ),
+      computer: this.positionedCharacters.filter(pc =>
+        opponentTypes.some(type => pc.character instanceof type)
+      )
+    };
+  }
+}
+
+class AIController {
+  constructor(characterManager, positionCalculator, playerTypes, opponentTypes) {
+    this.characterManager = characterManager;
+    this.positionCalculator = positionCalculator;
+    this.playerTypes = playerTypes;
+    this.opponentTypes = opponentTypes;
+  }
+
+  findBestAction(computerCharacters) {
+    for (const comp of computerCharacters) {
+      const attackTarget = this.findAttackTarget(comp.position, comp.character);
+      if (attackTarget) {
+        return {
+          fromIndex: comp.position,
+          toIndex: attackTarget.position,
+          type: ACTION_ATTACK
+        };
+      }
+    }
+
+    for (const comp of computerCharacters) {
+      const moveAction = this.findMoveAction(comp.position, comp.character);
+      if (moveAction) {
+        return moveAction;
+      }
+    }
+
+    return null;
+  }
+
+  findAttackTarget(fromIndex, character) {
+    const attackRange = this.getAttackRange(character);
+    const { player: enemies } = this.characterManager.getCharactersByTeam(
+      this.playerTypes, this.opponentTypes
+    );
+
+    const targets = enemies.filter(enemy =>
+      this.positionCalculator.calculateDistance(fromIndex, enemy.position) <= attackRange
+    );
+
+    if (targets.length === 0) return null;
+
+    return targets.reduce((prev, curr) =>
+      prev.character.health < curr.character.health ? prev : curr
+    );
+  }
+
+  findMoveAction(fromIndex, character) {
+    const { player: enemies } = this.characterManager.getCharactersByTeam(
+      this.playerTypes, this.opponentTypes
+    );
+
+    if (enemies.length === 0) return null;
+
+    const closestEnemy = enemies.reduce((prev, curr) => {
+      const prevDist = this.positionCalculator.calculateDistance(fromIndex, prev.position);
+      const currDist = this.positionCalculator.calculateDistance(fromIndex, curr.position);
+      return currDist < prevDist ? curr : prev;
+    });
+
+    const nextPosition = this.positionCalculator.calculateNextPosition(
+      fromIndex,
+      closestEnemy.position,
+      this.getMoveRange(character)
+    );
+
+    // Добавляем проверку, что мы действительно можем переместиться
+    if (nextPosition !== fromIndex &&
+        !this.characterManager.isPositionOccupied(nextPosition) &&
+        this.positionCalculator.calculateDistance(fromIndex, nextPosition) <= this.getMoveRange(character)) {
+      return {
+        fromIndex,
+        toIndex: nextPosition,
+        type: ACTION_MOVE
+      };
+    }
+
+    return null;
+  }
+
+  getMoveRange(character) {
+    return RANGE_MAP[character.constructor.name]?.move ?? 1;
+  }
+
+  getAttackRange(character) {
+    return RANGE_MAP[character.constructor.name]?.attack ?? 1;
+  }
+}
 
 export default class GameController {
   constructor(gamePlay, stateService) {
     this.gamePlay = gamePlay;
     this.stateService = stateService;
-    this.charactersMap = new Map();
-    this.positionedCharacters = [];
-    this.activeCharacter = -1;
-    this.activeSelectCell = -1;
-    this.currentTurn = "player"; // или 'computer'
+    
+    this.playerTypes = [Bowman, Swordsman, Magician];
+    this.opponentTypes = [Daemon, Undead, Vampire];
+    
+    this.characterManager = new CharacterManager();
+    this.positionCalculator = new PositionCalculator(gamePlay.boardSize, this.characterManager);
+    this.aiController = new AIController(
+      this.characterManager, 
+      this.positionCalculator,
+      this.playerTypes,
+      this.opponentTypes
+    );
+    
     this.selectedCharacterIndex = null;
-    // this.selectedCharacter = null;
+    this.activeSelectCell = -1;
+    this.currentTurn = TEAM_PLAYER;
   }
 
   init() {
-    // TODO: add event listeners to gamePlay events
     this.gamePlay.drawUi(themes.prairie);
-    this.createTeamPositions();
+    this.createTeams();
     this.setupEventListeners();
-    // TODO: load saved stated from stateService
-    // Восстановление из сохраненного состояния
+
+    // Инициализируем значения по умолчанию
+    this.selectedCharacterIndex = null;
+    this.activeSelectCell = -1;
+
     const savedState = this.stateService.load();
-    if (savedState && savedState.nextTurn) {
+    if (savedState?.nextTurn) {
       this.currentTurn = savedState.nextTurn;
     }
 
-    this.saveGameState(); // сохраняем начальное состояние
+    this.saveGameState();
+
+    if (this.currentTurn === TEAM_COMPUTER) {
+      this.performComputerTurn();
+    }
   }
 
   setupEventListeners() {
@@ -50,303 +290,294 @@ export default class GameController {
     this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
   }
 
-  onCellClick(index) {
-    // TODO: react to click
-    const character = this.charactersMap.get(index);
+  async onCellClick(index) {
+    if (this.currentTurn !== TEAM_PLAYER) return;
+
+    const character = this.characterManager.getCharacterAt(index);
 
     if (this.selectedCharacterIndex !== null) {
-      const selectedChar = this.charactersMap.get(this.selectedCharacterIndex);
-      const distance = this.calculateDistance(
-        this.selectedCharacterIndex,
-        index
-      );
-
-      // 1. Выбор другого своего персонажа
-      if (character && playersTypes.some((t) => character instanceof t)) {
-        // Меняем выбранного персонажа
-        this.gamePlay.deselectCell(this.selectedCharacterIndex);
-        this.selectedCharacterIndex = index;
-        this.gamePlay.selectCell(index);
-        return;
-      }
-
-      // 2. Перемещение
-      if (
-        !character &&
-        distance <= this.getMoveRange(selectedChar) &&
-        !this.charactersMap.has(index)
-      ) {
-        // Перемещение
-        this.moveCharacter(this.selectedCharacterIndex, index);
-        this.gamePlay.deselectCell(this.selectedCharacterIndex);
-        this.gamePlay.deselectCell(this.activeSelectCell);
-        this.selectedCharacterIndex = null;
-        this.switchTurn();
-        return;
-      }
-
-      // 3. Атака
-      if (character && !playersTypes.some((t) => character instanceof t)) {
-        if (distance <= this.getAttackRange(selectedChar)) {
-          this.attackCharacter(this.selectedCharacterIndex, index);
-          this.gamePlay.deselectCell(this.selectedCharacterIndex);
-          this.gamePlay.deselectCell(this.activeSelectCell);
-          this.selectedCharacterIndex = null;
-          this.switchTurn();
-          return;
-        }
-      }
-
-      // 4. Недопустимое действие
-      GamePlay.showError("Недопустимое действие");
-      this.gamePlay.setCursor(cursors.notallowed);
+      await this.handleActionWithSelectedCharacter(index);
     } else {
-      // Нет выбранного персонажа
-      if (character && playersTypes.some((t) => character instanceof t)) {
-        this.gamePlay.selectCell(index);
-        this.selectedCharacterIndex = index;
-      }
+      this.handleCharacterSelection(index, character);
+    }
+  }
+
+  async handleActionWithSelectedCharacter(index) {
+    const selectedChar = this.characterManager.getCharacterAt(this.selectedCharacterIndex);
+
+    // Проверяем, что выбранный персонаж все еще существует
+    if (!selectedChar) {
+      this.deselectAllCells();
+      return;
+    }
+
+    const character = this.characterManager.getCharacterAt(index);
+    const distance = this.positionCalculator.calculateDistance(this.selectedCharacterIndex, index);
+
+    if (character && this.isPlayerCharacter(character)) {
+      this.selectCharacter(index);
+      return;
+    }
+
+    if (!character && this.canMoveTo(selectedChar, this.selectedCharacterIndex, index)) {
+      await this.moveCharacter(this.selectedCharacterIndex, index);
+      await this.endPlayerTurn();
+      return;
+    }
+
+    if (character && !this.isPlayerCharacter(character) &&
+      this.canAttack(selectedChar, this.selectedCharacterIndex, index)) {
+      await this.attackCharacter(this.selectedCharacterIndex, index);
+      await this.endPlayerTurn();
+      return;
+    }
+
+    GamePlay.showError('Недопустимое действие');
+    this.gamePlay.setCursor(cursors.notallowed);
+  }
+
+  handleCharacterSelection(index, character) {
+    if (character && this.isPlayerCharacter(character)) {
+      this.selectCharacter(index);
+    }
+  }
+
+  selectCharacter(index) {
+  // Снимаем выделение только если есть предыдущая выделенная ячейка
+    if (this.selectedCharacterIndex !== null && this.selectedCharacterIndex !== -1) {
+      this.gamePlay.deselectCell(this.selectedCharacterIndex);
+    }
+
+    this.selectedCharacterIndex = index;
+
+    // Выделяем новую ячейку только если индекс валидный
+    if (index !== null && index !== -1) {
+      this.gamePlay.selectCell(index);
     }
   }
 
   onCellEnter(index) {
-    // TODO: react to mouse enter
-    const character = this.charactersMap.get(index);
-    if (this.selectedCharacterIndex !== null) {
-      const selectedChar = this.charactersMap.get(this.selectedCharacterIndex);
-      // Есть выбранный персонаж
-      const distance = this.calculateDistance(
-        this.selectedCharacterIndex,
-        index
-      );
+    const character = this.characterManager.getCharacterAt(index);
 
-      if (character) {
-        this.gamePlay.showCellTooltip(
-          this.formatCharacterInfo(character),
-          index
-        );
-      }
-
-      if (character && playersTypes.some((type) => character instanceof type)) {
-        // Наведение на своего персонажа
-        // выбор другого персонажа
-        this.gamePlay.setCursor(cursors.pointer);
-      } else if (
-        character && !playersTypes.some((t) => character instanceof t)
-      ) {
-        // Наведение на противника
-        if (distance <= this.getAttackRange(selectedChar)) {
-          this.gamePlay.setCursor(cursors.crosshair);
-          this.gamePlay.selectCell(index, "red");
-        } else {
-          this.gamePlay.setCursor(cursors.notallowed);
-        }
-      } else {
-        // Пустая ячейка — возможен ход
-        if (distance <= this.getMoveRange(selectedChar)) {
-          this.gamePlay.setCursor(cursors.pointer); // допустимый ход
-          this.gamePlay.selectCell(index, "green");
-        } else {
-          this.gamePlay.setCursor(cursors.notallowed); // недопустимый ход
-        }
-      }
-      if (this.activeSelectCell !== -1) {
-        this.gamePlay.deselectCell(this.activeSelectCell);
-      }
-      this.activeSelectCell = index;
-    } else {
-      // нет выбранного персонажа
-      if (character && playersTypes.some((type) => character instanceof type)) {
-        this.gamePlay.showCellTooltip(
-          this.formatCharacterInfo(character),
-          index
-        );
-        this.gamePlay.setCursor(cursors.pointer);
-      } else {
-        this.gamePlay.setCursor(cursors.notallowed);
-      }
+    if (character) {
+      this.gamePlay.showCellTooltip(this.formatCharacterInfo(character), index);
     }
 
-    // const character = this.charactersMap.get(index);
-    // if (character) {
-    //   const info = this.formatCharacterInfo(character);
-    //   this.gamePlay.showCellTooltip(info, index);
-    // } else {
-    //   this.gamePlay.hideCellTooltip(index);
-    // }
+    if (this.selectedCharacterIndex === null) {
+      this.handleHoverWithoutSelection(character);
+    } else {
+      this.handleHoverWithSelection(index, character);
+    }
+  }
+
+  handleHoverWithoutSelection(character) {
+    this.gamePlay.setCursor(
+      character && this.isPlayerCharacter(character) ? cursors.pointer : cursors.notallowed
+    );
+  }
+
+  handleHoverWithSelection(index, targetCharacter) {
+    const selectedChar = this.characterManager.getCharacterAt(this.selectedCharacterIndex);
+    const distance = this.positionCalculator.calculateDistance(this.selectedCharacterIndex, index);
+
+    if (targetCharacter && this.isPlayerCharacter(targetCharacter)) {
+      this.gamePlay.setCursor(cursors.pointer);
+    } else if (targetCharacter && !this.isPlayerCharacter(targetCharacter)) {
+      this.handleEnemyHover(index, selectedChar, distance);
+    } else {
+      this.handleEmptyCellHover(index, selectedChar, distance);
+    }
+
+    this.updateActiveSelection(index);
+  }
+
+  handleEnemyHover(index, selectedChar, distance) {
+    if (distance <= this.getAttackRange(selectedChar)) {
+      this.gamePlay.setCursor(cursors.crosshair);
+      this.gamePlay.selectCell(index, 'red');
+    } else {
+      this.gamePlay.setCursor(cursors.notallowed);
+    }
+  }
+
+  handleEmptyCellHover(index, selectedChar, distance) {
+    if (distance <= this.getMoveRange(selectedChar)) {
+      this.gamePlay.setCursor(cursors.pointer);
+      this.gamePlay.selectCell(index, 'green');
+    } else {
+      this.gamePlay.setCursor(cursors.notallowed);
+    }
+  }
+
+  updateActiveSelection(index) {
+  // Снимаем выделение только если есть активная ячейка и она валидная
+    if (this.activeSelectCell !== -1 && this.activeSelectCell !== null) {
+      this.gamePlay.deselectCell(this.activeSelectCell);
+    }
+
+    this.activeSelectCell = index;
+
+    // Выделяем новую ячейку только если индекс валидный
+    if (index !== -1 && index !== null) {
+    // Цвет выделения будет установлен в методах handleEnemyHover/handleEmptyCellHover
+    }
   }
 
   onCellLeave(index) {
-    // TODO: react to mouse leave
     this.gamePlay.hideCellTooltip(index);
   }
 
-  calculateDistance(fromIndex, toIndex) {
-    const size = this.gamePlay.boardSize;
-    const fromRow = Math.floor(fromIndex / size);
-    const fromCol = fromIndex % size;
-    const toRow = Math.floor(toIndex / size);
-    const toCol = toIndex % size;
-    return Math.max(Math.abs(fromRow - toRow), Math.abs(fromCol - toCol));
+  canMoveTo(character, fromIndex, toIndex) {
+    const distance = this.positionCalculator.calculateDistance(fromIndex, toIndex);
+    return distance <= this.getMoveRange(character) &&
+           !this.characterManager.isPositionOccupied(toIndex);
+  }
+
+  canAttack(character, fromIndex, toIndex) {
+    const distance = this.positionCalculator.calculateDistance(fromIndex, toIndex);
+    return distance <= this.getAttackRange(character);
   }
 
   getMoveRange(character) {
-    // Возвращает радиус перемещения в клетках для данного персонажа
-    if (character instanceof Swordsman || character instanceof Undead) {
-      return 4;
-    } else if (character instanceof Bowman || character instanceof Vampire) {
-      return 2;
-    } else if (character instanceof Magician || character instanceof Daemon) {
-      return 1;
-    }
+    return RANGE_MAP[character.constructor.name]?.move ?? 1;
   }
 
   getAttackRange(character) {
-    if (character instanceof Swordsman || character instanceof Undead) {
-      return 1;
-    } else if (character instanceof Bowman || character instanceof Vampire) {
-      return 2;
-    } else if (character instanceof Magician || character instanceof Daemon) {
-      return 4;
+    return RANGE_MAP[character.constructor.name]?.attack ?? 1;
+  }
+
+  isPlayerCharacter(character) {
+    return this.playerTypes.some(type => character instanceof type);
+  }
+
+  async performComputerTurn() {
+    const { computer: computerCharacters } = this.characterManager.getCharactersByTeam(
+      this.playerTypes, this.opponentTypes
+    );
+
+    if (computerCharacters.length === 0) {
+      this.switchTurn();
+      return;
+    }
+
+    const bestAction = this.aiController.findBestAction(computerCharacters);
+
+    if (bestAction) {
+      await this.executeAction(bestAction);
+    }
+
+    this.switchTurn();
+  }
+
+  async executeAction(action) {
+    if (action.type === ACTION_ATTACK) {
+      await this.attackCharacter(action.fromIndex, action.toIndex);
+    } else if (action.type === ACTION_MOVE) {
+      await this.moveCharacter(action.fromIndex, action.toIndex);
     }
   }
 
-  attackCharacter = (attackerIndex, targetIndex) => {
-    const attackerPosition = this.positionedCharacters.find((obj) => {
-      return obj.position === attackerIndex;
-    });
-    const targetPosition = this.positionedCharacters.find((obj) => {
-      return obj.position === targetIndex;
-    });
+  async attackCharacter(attackerIndex, targetIndex) {
+    const attacker = this.characterManager.getCharacterAt(attackerIndex);
+    const target = this.characterManager.getCharacterAt(targetIndex);
 
-    if (!attackerPosition || !targetPosition) {
-      GamePlay.showError("Атакующий или цель не найдены");
+    if (!attacker || !target) {
+      GamePlay.showError('Атакующий или цель не найдены');
+      this.deselectAllCells();
       return;
     }
 
-    const attacker = attackerPosition.character;
-    const target = targetPosition.character;
-
-    // Расчет урона
-    const damage = Math.max(
-      attacker.attack - target.defence,
-      attacker.attack * 0.1
-    );
-
-    // Обновляем здоровье атакуемого
+    const damage = Math.max(attacker.attack - target.defence, attacker.attack * 0.1);
     target.health = Math.max(target.health - damage, 0);
 
-    // Визуализация урона
-    return this.gamePlay
-      .showDamage(targetIndex, Math.round(damage))
-      .then(() => {
-        // После анимации урона — перерисовываем позиции
-        this.gamePlay.redrawPositions(this.positionedCharacters);
-      });
-  };
+    await this.gamePlay.showDamage(targetIndex, Math.round(damage));
 
-  moveCharacter = (fromIndex, toIndex) => {
-    // Находим персонажа по fromIndex
-    const characterPosition = this.positionedCharacters.find((obj) => {
-      return obj.position === fromIndex;
-    });
+    if (target.health === 0) {
+      this.characterManager.removeCharacter(targetIndex);
+      // Если целевой персонаж умер, снимаем выделение если он был выбран
+      if (this.selectedCharacterIndex === targetIndex) {
+        this.selectedCharacterIndex = null;
+      }
+    }
 
-    if (!characterPosition) {
-      GamePlay.showError("Персонаж не найден для перемещения");
+    this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
+  }
+
+  async moveCharacter(fromIndex, toIndex) {
+    const success = this.characterManager.moveCharacter(fromIndex, toIndex);
+
+    if (!success) {
+      GamePlay.showError('Персонаж не найден для перемещения');
+      this.deselectAllCells();
       return;
     }
 
-    // Обновляем позицию персонажа
-    characterPosition.position = toIndex;
-    this.charactersMap.delete(fromIndex);
-    this.charactersMap.set(toIndex, characterPosition.character);
+    this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
+  }
 
-    // Перерисовываем
-    this.gamePlay.redrawPositions(this.positionedCharacters);
-  };
+  async endPlayerTurn() {
+    this.deselectAllCells();
+    this.switchTurn();
 
-  // Метод для переключения хода
+    await this.delay(500);
+
+    if (this.currentTurn === TEAM_COMPUTER) {
+      await this.performComputerTurn();
+    }
+  }
+
+  deselectAllCells() {
+  // Снимаем выделение только с валидных индексов
+    if (this.selectedCharacterIndex !== null && this.selectedCharacterIndex !== -1) {
+      this.gamePlay.deselectCell(this.selectedCharacterIndex);
+    }
+
+    if (this.activeSelectCell !== null && this.activeSelectCell !== -1) {
+      this.gamePlay.deselectCell(this.activeSelectCell);
+    }
+
+    this.selectedCharacterIndex = null;
+    this.activeSelectCell = -1;
+  }
+
   switchTurn() {
-    this.currentTurn = this.currentTurn === "player" ? "computer" : "player";
+    this.currentTurn = this.currentTurn === TEAM_PLAYER ? TEAM_COMPUTER : TEAM_PLAYER;
     this.saveGameState();
   }
 
-  // Сохраняем состояние
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   saveGameState() {
     const state = new GameState(this.currentTurn);
     this.stateService.save(state);
   }
 
-  // Метод для завершения хода игрока
-  endPlayerTurn() {
-    this.switchTurn();
-    // Тут можно реализовать автоматический ход компьютера
-    if (this.currentTurn === "computer") {
-      this.performComputerMove();
-    }
-  }
-
-  performComputerMove() {
-    // Логика хода компьютера
-    // Например, выбрать случайного персонажа и сделать ход
-    // После завершения - переключить ход обратно
-    setTimeout(() => {
-      // например, компьютер делает свой ход
-      this.switchTurn(); // возвращаем ход игроку
-    }, 1000);
-  }
-
   formatCharacterInfo(character) {
-    if (!character) return "";
     return `🎖${character.level} ⚔${character.attack} 🛡${character.defence} ❤${character.health}`.trim();
   }
 
-  // Основная функция для создания позиций команд
-  createTeamPositions() {
-    // Создаем команды с использованием новых названий переменных
-    const playersTeam = generateTeam(playersTypes, 1, 4).characters;
-    const opponentTeam = generateTeam(opponentTypes, 1, 4).characters;
+  createTeams() {
+    const playerPositions = this.positionCalculator.getBorderColumnsIndices('first');
+    const opponentPositions = this.positionCalculator.getBorderColumnsIndices('last');
 
-    const playersTeamPositions = this.getBorderColumnsIndices("first"); // Левая сторона
-    const opponentTeamPositions = this.getBorderColumnsIndices("last"); // Правая сторона
-
-    this.assignTeamCharacters(playersTeam, playersTeamPositions);
-    this.assignTeamCharacters(opponentTeam, opponentTeamPositions);
-
-    this.gamePlay.redrawPositions(this.positionedCharacters);
+    this.assignTeamToPositions(this.playerTypes, playerPositions);
+    this.assignTeamToPositions(this.opponentTypes, opponentPositions);
   }
 
-  // Объединённый метод для получения индексов первых или последних двух колонок
-  getBorderColumnsIndices(side = "first") {
-    const size = this.gamePlay.boardSize;
-    const indices = [];
+  assignTeamToPositions(teamTypeArray, positionIndices) {
+    const teamCharacters = generateTeam(teamTypeArray, 1, 4).characters;
+    const availablePositions = [ ...positionIndices ];
 
-    for (let row = 0; row < size; row++) {
-      const baseIndex = row * size;
-      if (side === "first") {
-        // Первые два столбца (левая сторона)
-        indices.push(baseIndex); // первый столбец
-        indices.push(baseIndex + 1); // второй столбец
-      } else if (side === "last") {
-        // Последние два столбца (правая сторона)
-        indices.push(baseIndex + size - 2); // предпоследний
-        indices.push(baseIndex + size - 1); // последний
-      }
-    }
-    return indices;
-  }
-
-  // Вспомогательная функция для назначения позиций для одной команды
-  assignTeamCharacters(team, positionIndices) {
-    const availablePositions = [...positionIndices];
-    for (const character of team) {
+    for (const character of teamCharacters) {
       if (availablePositions.length === 0) break;
-      const randIdx = Math.floor(Math.random() * availablePositions.length);
-      const position = availablePositions.splice(randIdx, 1)[0];
-      this.charactersMap.set(position, character);
-      this.positionedCharacters.push(
-        new PositionedCharacter(character, position)
-      );
+
+      const randomIndex = Math.floor(Math.random() * availablePositions.length);
+      const position = availablePositions.splice(randomIndex, 1)[0];
+      this.characterManager.addCharacter(character, position);
     }
+
+    this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
   }
 }
