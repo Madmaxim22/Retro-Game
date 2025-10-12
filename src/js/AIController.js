@@ -1,4 +1,4 @@
-import { ACTION_ATTACK, ACTION_MOVE, RANGE_MAP } from "./GameController";
+import { ACTION_ATTACK, ACTION_MOVE, RANGE_MAP } from './GameController';
 
 export default class AIController {
   constructor(characterManager, positionCalculator, playerTypes, opponentTypes) {

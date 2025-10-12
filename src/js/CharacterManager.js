@@ -49,4 +49,16 @@ export default class CharacterManager {
       )
     };
   }
+
+  assignTeamToPositions(teamCharacters, positionIndices) {
+    const availablePositions = [ ...positionIndices ];
+
+    for (const character of teamCharacters) {
+      if (availablePositions.length === 0) break;
+
+      const randomIndex = Math.floor(Math.random() * availablePositions.length);
+      const position = availablePositions.splice(randomIndex, 1)[0];
+      this.addCharacter(character, position);
+    }
+  }
 }
