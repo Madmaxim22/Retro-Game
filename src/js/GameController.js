@@ -7,19 +7,21 @@ import Magician from './characters/Magician';
 import Daemon from './characters/Daemon';
 import Swordsman from './characters/Swordsman';
 import { generateTeam } from './generators';
-import PositionedCharacter from './PositionedCharacter';
 import GamePlay from './GamePlay';
 import GameState from './GameState';
+import PositionCalculator from "./PositionCalculator";
+import CharacterManager from "./CharacterManager";
+import AIController from "./AIController";
 
 // Константы для команд
 const TEAM_PLAYER = 'player';
 const TEAM_COMPUTER = 'computer';
 
 // Константы для типов действий
-const ACTION_ATTACK = 'attack';
-const ACTION_MOVE = 'move';
+export const ACTION_ATTACK = 'attack';
+export const ACTION_MOVE = 'move';
 
-const RANGE_MAP = {
+export const RANGE_MAP = {
   Swordsman: {
     move: 4, attack: 1
   },
@@ -40,231 +42,35 @@ const RANGE_MAP = {
   }
 };
 
-class PositionCalculator {
-  constructor(boardSize, characterManager) {
-    this.boardSize = boardSize;
-    this.characterManager = characterManager;
-  }
-
-  calculateDistance(fromIndex, toIndex) {
-    const fromRow = Math.floor(fromIndex / this.boardSize);
-    const fromCol = fromIndex % this.boardSize;
-    const toRow = Math.floor(toIndex / this.boardSize);
-    const toCol = toIndex % this.boardSize;
-    return Math.max(Math.abs(fromRow - toRow), Math.abs(fromCol - toCol));
-  }
-
-  getBorderColumnsIndices(side = 'first') {
-    const indices = [];
-    const isFirstColumn = side === 'first';
-
-    for (let row = 0; row < this.boardSize; row++) {
-      const baseIndex = row * this.boardSize;
-      indices.push(
-        baseIndex + (isFirstColumn ? 0 : this.boardSize - 2),
-        baseIndex + (isFirstColumn ? 1 : this.boardSize - 1)
-      );
-    }
-    return indices;
-  }
-
-  calculateNextPosition(fromIndex, toIndex, moveRange) {
-    const fromRow = Math.floor(fromIndex / this.boardSize);
-    const fromCol = fromIndex % this.boardSize;
-    const toRow = Math.floor(toIndex / this.boardSize);
-    const toCol = toIndex % this.boardSize;
-
-    const deltaRow = toRow - fromRow;
-    const deltaCol = toCol - fromCol;
-
-    const distance = Math.max(Math.abs(deltaRow), Math.abs(deltaCol));
-    if (distance === 0) return fromIndex;
-
-    // Пробуем разные варианты шагов, начиная с максимально возможного
-    for (let step = Math.min(moveRange, distance); step > 0; step--) {
-      const stepRow = Math.round((deltaRow / distance) * step);
-      const stepCol = Math.round((deltaCol / distance) * step);
-
-      const newRow = Math.max(0, Math.min(this.boardSize - 1, fromRow + stepRow));
-      const newCol = Math.max(0, Math.min(this.boardSize - 1, fromCol + stepCol));
-
-      const newIndex = newRow * this.boardSize + newCol;
-
-      // Проверяем, что позиция свободна и не является исходной
-      if (newIndex !== fromIndex && !this.characterManager.isPositionOccupied(newIndex)) {
-        return newIndex;
-      }
-    }
-
-    // Если не нашли подходящую позицию, остаемся на месте
-    return fromIndex;
-  }
-}
-
-class CharacterManager {
-  constructor() {
-    this.charactersMap = new Map();
-    this.positionedCharacters = [];
-  }
-
-  addCharacter(character, position) {
-    this.charactersMap.set(position, character);
-    this.positionedCharacters.push(new PositionedCharacter(character, position));
-  }
-
-  removeCharacter(position) {
-    this.charactersMap.delete(position);
-    this.positionedCharacters = this.positionedCharacters.filter(
-      posChar => posChar.position !== position
-    );
-  }
-
-  moveCharacter(fromIndex, toIndex) {
-    const characterPos = this.positionedCharacters.find(
-      posChar => posChar.position === fromIndex
-    );
-
-    if (!characterPos) return false;
-
-    this.charactersMap.delete(fromIndex);
-    this.charactersMap.set(toIndex, characterPos.character);
-    characterPos.position = toIndex;
-    return true;
-  }
-
-  getCharacterAt(position) {
-    return this.charactersMap.get(position);
-  }
-
-  isPositionOccupied(position) {
-    return this.charactersMap.has(position);
-  }
-
-  getCharactersByTeam(playerTypes, opponentTypes) {
-    return {
-      player: this.positionedCharacters.filter(pc =>
-        playerTypes.some(type => pc.character instanceof type)
-      ),
-      computer: this.positionedCharacters.filter(pc =>
-        opponentTypes.some(type => pc.character instanceof type)
-      )
-    };
-  }
-}
-
-class AIController {
-  constructor(characterManager, positionCalculator, playerTypes, opponentTypes) {
-    this.characterManager = characterManager;
-    this.positionCalculator = positionCalculator;
-    this.playerTypes = playerTypes;
-    this.opponentTypes = opponentTypes;
-  }
-
-  findBestAction(computerCharacters) {
-    for (const comp of computerCharacters) {
-      const attackTarget = this.findAttackTarget(comp.position, comp.character);
-      if (attackTarget) {
-        return {
-          fromIndex: comp.position,
-          toIndex: attackTarget.position,
-          type: ACTION_ATTACK
-        };
-      }
-    }
-
-    for (const comp of computerCharacters) {
-      const moveAction = this.findMoveAction(comp.position, comp.character);
-      if (moveAction) {
-        return moveAction;
-      }
-    }
-
-    return null;
-  }
-
-  findAttackTarget(fromIndex, character) {
-    const attackRange = this.getAttackRange(character);
-    const { player: enemies } = this.characterManager.getCharactersByTeam(
-      this.playerTypes, this.opponentTypes
-    );
-
-    const targets = enemies.filter(enemy =>
-      this.positionCalculator.calculateDistance(fromIndex, enemy.position) <= attackRange
-    );
-
-    if (targets.length === 0) return null;
-
-    return targets.reduce((prev, curr) =>
-      prev.character.health < curr.character.health ? prev : curr
-    );
-  }
-
-  findMoveAction(fromIndex, character) {
-    const { player: enemies } = this.characterManager.getCharactersByTeam(
-      this.playerTypes, this.opponentTypes
-    );
-
-    if (enemies.length === 0) return null;
-
-    const closestEnemy = enemies.reduce((prev, curr) => {
-      const prevDist = this.positionCalculator.calculateDistance(fromIndex, prev.position);
-      const currDist = this.positionCalculator.calculateDistance(fromIndex, curr.position);
-      return currDist < prevDist ? curr : prev;
-    });
-
-    const nextPosition = this.positionCalculator.calculateNextPosition(
-      fromIndex,
-      closestEnemy.position,
-      this.getMoveRange(character)
-    );
-
-    // Добавляем проверку, что мы действительно можем переместиться
-    if (nextPosition !== fromIndex &&
-        !this.characterManager.isPositionOccupied(nextPosition) &&
-        this.positionCalculator.calculateDistance(fromIndex, nextPosition) <= this.getMoveRange(character)) {
-      return {
-        fromIndex,
-        toIndex: nextPosition,
-        type: ACTION_MOVE
-      };
-    }
-
-    return null;
-  }
-
-  getMoveRange(character) {
-    return RANGE_MAP[character.constructor.name]?.move ?? 1;
-  }
-
-  getAttackRange(character) {
-    return RANGE_MAP[character.constructor.name]?.attack ?? 1;
-  }
-}
-
 export default class GameController {
   constructor(gamePlay, stateService) {
     this.gamePlay = gamePlay;
     this.stateService = stateService;
-    
-    this.playerTypes = [Bowman, Swordsman, Magician];
-    this.opponentTypes = [Daemon, Undead, Vampire];
-    
+
+    this.playerTypes = [
+      Bowman, Swordsman, Magician
+    ];
+    this.opponentTypes = [
+      Daemon, Undead, Vampire
+    ];
+
     this.characterManager = new CharacterManager();
     this.positionCalculator = new PositionCalculator(gamePlay.boardSize, this.characterManager);
     this.aiController = new AIController(
-      this.characterManager, 
+      this.characterManager,
       this.positionCalculator,
       this.playerTypes,
       this.opponentTypes
     );
-    
+
     this.selectedCharacterIndex = null;
     this.activeSelectCell = -1;
     this.currentTurn = TEAM_PLAYER;
+    this.currentTheme = themes.prairie;
   }
 
   init() {
-    this.gamePlay.drawUi(themes.prairie);
+    this.gamePlay.drawUi(this.currentTheme);
     this.createTeams();
     this.setupEventListeners();
 
@@ -494,6 +300,8 @@ export default class GameController {
 
     if (target.health === 0) {
       this.characterManager.removeCharacter(targetIndex);
+      // Проверка, если противников больше нет
+      this.checkForLevelUpOrNextLevel();
       // Если целевой персонаж умер, снимаем выделение если он был выбран
       if (this.selectedCharacterIndex === targetIndex) {
         this.selectedCharacterIndex = null;
@@ -580,4 +388,101 @@ export default class GameController {
 
     this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
   }
+
+  checkForLevelUpOrNextLevel() {
+    const { computer: enemies } = this.characterManager.getCharactersByTeam(
+      this.playerTypes, this.opponentTypes
+    );
+
+    if (enemies.length === 0) {
+    // Повысить уровни всех персонажей игрока
+      this.characterManager.positionedCharacters.forEach(posChar => {
+        if (this.isPlayerCharacter(posChar.character)) {
+          this.levelUpCharacter(posChar.character);
+        }
+      });
+
+      // Переход на следующий уровень
+      this.nextLevel();
+    }
+  }
+
+  levelUpCharacter(character) {
+    character.level += 1;
+
+    // Увеличение attack и defence по формуле
+    const attackBefore = character.attack;
+    const defenceBefore = character.defence;
+
+    // Обновляем attack и defence
+    character.attack = Math.max(
+      attackBefore,
+      attackBefore * (80 + character.health) / 100
+    );
+    character.defence = Math.max(
+      defenceBefore,
+      defenceBefore * (80 + character.health) / 100
+    );
+
+    // Обновляем здоровье согласно уровню
+    character.health = Math.min(character.health + 80, 100);
+  }
+
+  nextLevel() {
+    const keys = Object.keys(themes); // ['prairie', 'desert', 'arctic', 'mountain']
+    const currentIndex = keys.indexOf(this.currentTheme);
+
+    if (currentIndex === -1 || currentIndex >= keys.length - 1) {
+    // Последняя тема или текущая тема не найдена — ничего не делаем
+      console.log('Достигнута последняя тема. Новое изменение невозможно.');
+      return;
+    }
+
+    const nextIndex = currentIndex + 1;
+    this.currentTheme = keys[nextIndex];
+
+    // Меняем тему в UI
+    this.gamePlay.drawUi(themes[this.currentTheme]);
+
+    // Сохраняем текущих персонажей игрока
+    const currentPlayerCharacters = this.characterManager.positionedCharacters
+      .filter(posChar => this.isPlayerCharacter(posChar.character))
+      .map(posChar => ({
+        character: posChar.character, position: posChar.position
+      }));
+
+    // Создаем новые менеджеры
+    this.characterManager = new CharacterManager();
+    this.positionCalculator = new PositionCalculator(this.gamePlay.boardSize, this.characterManager);
+    this.aiController = new AIController(
+      this.characterManager,
+      this.positionCalculator,
+      this.playerTypes,
+      this.opponentTypes
+    );
+
+    // Создаем команду игрока, используя сохраненных персонажей
+    for (const { character, position } of currentPlayerCharacters) {
+      this.characterManager.addCharacter(character, position);
+    }
+
+    // Создаем команду компьютера заново
+    const opponentPositions = this.positionCalculator.getBorderColumnsIndices('last');
+    const opponentCharacters = generateTeam(this.opponentTypes, 1, 4).characters;
+
+    for (const character of opponentCharacters) {
+      const availablePositions = [ ...opponentPositions ];
+      const randomIndex = Math.floor(Math.random() * availablePositions.length);
+      const position = availablePositions.splice(randomIndex, 1)[0];
+      this.characterManager.addCharacter(character, position);
+    }
+
+    this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
+
+    this.currentTurn = TEAM_PLAYER;
+    this.saveGameState();
+
+    this.performComputerTurn();
+  }
+
 }
