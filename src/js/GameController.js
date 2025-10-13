@@ -53,6 +53,7 @@ export default class GameController {
     this.gamePlay = gamePlay;
     this.stateService = stateService;
 
+    // Типы персонажей для игрока и противника
     this.playerTypes = [
       Bowman, Swordsman, Magician
     ];
@@ -60,6 +61,7 @@ export default class GameController {
       Daemon, Undead, Vampire
     ];
 
+    // Инициализация менеджера персонажей, калькулятора позиций и ИИ
     this.characterManager = new CharacterManager();
     this.positionCalculator = new PositionCalculator(
       gamePlay.boardSize,
@@ -72,6 +74,7 @@ export default class GameController {
       this.opponentTypes
     );
 
+    // Переменные для состояния выбранных персонажей и текущего хода
     this.selectedCharacterIndex = null;
     this.activeSelectCell = -1;
     this.currentTurn = TEAM_PLAYER;
@@ -80,11 +83,13 @@ export default class GameController {
     this.maxScore = 0;
   }
 
+  // Инициализация: установка слушателей и старт новой игры
   init() {
     this.setupEventListeners();
     this.startNewGame();
   }
 
+  // Сброс состояния к начальной
   reset() {
     this.characterManager = new CharacterManager();
     this.positionCalculator = new PositionCalculator(
@@ -106,6 +111,7 @@ export default class GameController {
     this.maxScore = 0;
   }
 
+  // Установка слушателей событий UI
   setupEventListeners() {
     this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
     this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
@@ -115,18 +121,24 @@ export default class GameController {
     this.gamePlay.addLoadGameListener(this.loadGameState.bind(this));
   }
 
+  // Обработка клика по ячейке
   async onCellClick(index) {
     if (this.gameOver || this.currentTurn !== TEAM_PLAYER) return;
 
     const character = this.characterManager.getCharacterAt(index);
 
     if (this.selectedCharacterIndex !== null) {
+      // Есть выбранный персонаж, обрабатываем действие
       await this.handleActionWithSelectedCharacter(index);
     } else {
+      // Нет выбранного персонажа, выбираем персонажа
       this.handleCharacterSelection(index, character);
+      const distance = this.getMoveRange(character);
+      this.gamePlay.highlightRange(index, distance);
     }
   }
 
+  // Обработка действия с выбранным персонажем
   async handleActionWithSelectedCharacter(index) {
     const selectedChar = this.characterManager.getCharacterAt(
       this.selectedCharacterIndex
@@ -139,25 +151,29 @@ export default class GameController {
     }
 
     const character = this.characterManager.getCharacterAt(index);
-    const distance = this.positionCalculator.calculateDistance(
-      this.selectedCharacterIndex,
-      index
-    );
 
+    // Если клик по своему персонажу - меняем выделение
     if (character && this.isPlayerCharacter(character)) {
       this.selectCharacter(index);
+      const distance = this.getMoveRange(character);
+      this.gamePlay.highlightRange(index, distance);
       return;
     }
 
+    // Если клик по пустой ячейке и можно переместиться
     if (
       !character &&
       this.canMoveTo(selectedChar, this.selectedCharacterIndex, index)
     ) {
       await this.moveCharacter(this.selectedCharacterIndex, index);
+      const character = this.characterManager.getCharacterAt(index);
+      const distance = this.getMoveRange(character);
+      this.gamePlay.highlightRange(index, distance);
       await this.endPlayerTurn();
       return;
     }
 
+    // Если клик по врагу и можно атаковать
     if (
       character &&
       !this.isPlayerCharacter(character) &&
@@ -168,18 +184,21 @@ export default class GameController {
       return;
     }
 
+    // Недопустимое действие
     GamePlay.showError('Недопустимое действие');
     this.gamePlay.setCursor(cursors.notallowed);
   }
 
+  // Обработка выбора персонажа
   handleCharacterSelection(index, character) {
     if (character && this.isPlayerCharacter(character)) {
       this.selectCharacter(index);
     }
   }
 
+  // Выделение выбранного персонажа
   selectCharacter(index) {
-    // Снимаем выделение только если есть предыдущая выделенная ячейка
+    // Снимаем выделение предыдущего
     if (
       this.selectedCharacterIndex !== null &&
       this.selectedCharacterIndex !== -1
@@ -189,21 +208,24 @@ export default class GameController {
 
     this.selectedCharacterIndex = index;
 
-    // Выделяем новую ячейку только если индекс валидный
+    // Выделяем новую ячейку
     if (index !== null && index !== -1) {
       this.gamePlay.selectCell(index);
     }
   }
 
+  // Обработка наведения курсора на ячейку
   onCellEnter(index) {
     if (this.gameOver || this.currentTurn !== TEAM_PLAYER) return;
 
     const character = this.characterManager.getCharacterAt(index);
 
+    // Показываем подсказку с информацией о персонаже
     if (character) {
       this.gamePlay.showCellTooltip(this.formatCharacterInfo(character), index);
     }
 
+    // Обработка наведения в зависимости от выбора
     if (this.selectedCharacterIndex === null) {
       this.handleHoverWithoutSelection(character);
     } else {
@@ -211,6 +233,7 @@ export default class GameController {
     }
   }
 
+  // Наведение без выбранного персонажа
   handleHoverWithoutSelection(character) {
     this.gamePlay.setCursor(
       character && this.isPlayerCharacter(character)
@@ -219,6 +242,7 @@ export default class GameController {
     );
   }
 
+  // Наведение при выбранном персонаже
   handleHoverWithSelection(index, targetCharacter) {
     const selectedChar = this.characterManager.getCharacterAt(
       this.selectedCharacterIndex
@@ -239,6 +263,7 @@ export default class GameController {
     this.updateActiveSelection(index);
   }
 
+  // Обработка наведения на врага
   handleEnemyHover(index, selectedChar, distance) {
     if (distance <= this.getAttackRange(selectedChar)) {
       this.gamePlay.setCursor(cursors.crosshair);
@@ -248,6 +273,7 @@ export default class GameController {
     }
   }
 
+  // Обработка наведения на пустую ячейку
   handleEmptyCellHover(index, selectedChar, distance) {
     if (distance <= this.getMoveRange(selectedChar)) {
       this.gamePlay.setCursor(cursors.pointer);
@@ -257,24 +283,22 @@ export default class GameController {
     }
   }
 
+  // Обновление активной выбранной ячейки
   updateActiveSelection(index) {
-    // Снимаем выделение только если есть активная ячейка и она валидная
+    // Снимаем выделение с предыдущей активной ячейки
     if (this.activeSelectCell !== -1 && this.activeSelectCell !== null) {
       this.gamePlay.deselectCell(this.activeSelectCell);
     }
 
     this.activeSelectCell = index;
-
-    // Выделяем новую ячейку только если индекс валидный
-    if (index !== -1 && index !== null) {
-      // Цвет выделения будет установлен в методах handleEnemyHover/handleEmptyCellHover
-    }
   }
 
+  // Обработка ухода курсора с ячейки
   onCellLeave(index) {
     this.gamePlay.hideCellTooltip(index);
   }
 
+  // Проверка, можно ли переместить персонажа
   canMoveTo(character, fromIndex, toIndex) {
     const distance = this.positionCalculator.calculateDistance(
       fromIndex,
@@ -286,6 +310,7 @@ export default class GameController {
     );
   }
 
+  // Проверка, можно ли атаковать
   canAttack(character, fromIndex, toIndex) {
     const distance = this.positionCalculator.calculateDistance(
       fromIndex,
@@ -294,18 +319,22 @@ export default class GameController {
     return distance <= this.getAttackRange(character);
   }
 
+  // Получение диапазона перемещения
   getMoveRange(character) {
     return RANGE_MAP[character.constructor.name]?.move ?? 1;
   }
 
+  // Получение диапазона атаки
   getAttackRange(character) {
     return RANGE_MAP[character.constructor.name]?.attack ?? 1;
   }
 
+  // Проверка, является ли персонаж игроком
   isPlayerCharacter(character) {
     return this.playerTypes.some((type) => character instanceof type);
   }
 
+  // Логика хода компьютера
   async performComputerTurn() {
     const { computer: computerCharacters } =
       this.characterManager.getCharactersByTeam(
@@ -318,13 +347,14 @@ export default class GameController {
       return;
     }
 
+    // ИИ ищет лучший ход
     const bestAction = this.aiController.findBestAction(computerCharacters);
 
     if (bestAction) {
       await this.executeAction(bestAction);
     }
 
-    // Проверяем, остались ли еще живые игроки
+    // Проверка остались ли живые игроки
     const playerCharactersAlive =
       this.characterManager.positionedCharacters.some((posChar) =>
         this.isPlayerCharacter(posChar.character)
@@ -332,13 +362,14 @@ export default class GameController {
 
     if (!playerCharactersAlive) {
       // Игра окончена, проигрыш игрока
-      this.endGame(false); // или вызывайте свой метод завершения
+      this.endGame(false);
       return;
     }
 
-    this.switchTurn();
+    this.switchTurn(); // Передача хода
   }
 
+  // Выполнение выбранного действия (атаки или перемещения)
   async executeAction(action) {
     if (action.type === ACTION_ATTACK) {
       await this.attackCharacter(action.fromIndex, action.toIndex);
@@ -347,6 +378,7 @@ export default class GameController {
     }
   }
 
+  // Атака персонажа
   async attackCharacter(attackerIndex, targetIndex) {
     const attacker = this.characterManager.getCharacterAt(attackerIndex);
     const target = this.characterManager.getCharacterAt(targetIndex);
@@ -357,27 +389,32 @@ export default class GameController {
       return;
     }
 
+    // Расчет урона с учетом защиты
     const damage = Math.max(
       attacker.attack - target.defence,
       attacker.attack * 0.1
     );
     target.health = Math.max(target.health - damage, 0);
 
+    // Визуализируем урон
     await this.gamePlay.showDamage(targetIndex, Math.round(damage));
 
+    // Если персонаж умер
     if (target.health === 0) {
       this.characterManager.removeCharacter(targetIndex);
       // Проверка, если противников больше нет
       this.checkForLevelUpOrNextLevel();
-      // Если целевой персонаж умер, снимаем выделение если он был выбран
+      // Если убитый был выбран, снимаем выделение
       if (this.selectedCharacterIndex === targetIndex) {
         this.selectedCharacterIndex = null;
       }
     }
 
+    // Перерисовка позиций
     this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
   }
 
+  // Перемещение персонажа
   async moveCharacter(fromIndex, toIndex) {
     const success = this.characterManager.moveCharacter(fromIndex, toIndex);
 
@@ -390,19 +427,21 @@ export default class GameController {
     this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
   }
 
+  // Завершение хода игрока
   async endPlayerTurn() {
     this.deselectAllCells();
     this.switchTurn();
+    this.gamePlay.clearHighlights();
 
-    await this.delay(200);
+    await this.delay(200); // небольшая задержка
 
     if (this.currentTurn === TEAM_COMPUTER) {
       await this.performComputerTurn();
     }
   }
 
+  // Снятие выделения со всех ячеек
   deselectAllCells() {
-    // Снимаем выделение только с валидных индексов
     if (
       this.selectedCharacterIndex !== null &&
       this.selectedCharacterIndex !== -1
@@ -418,17 +457,19 @@ export default class GameController {
     this.activeSelectCell = -1;
   }
 
+  // Переключение хода
   switchTurn() {
     this.currentTurn =
       this.currentTurn === TEAM_PLAYER ? TEAM_COMPUTER : TEAM_PLAYER;
   }
 
+  // Обертка для задержки
   delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // Сохранение текущего состояния игры
   saveGameState() {
-  // Собираем текущие данные для сохранения
     const characterPositions = this.characterManager.positionedCharacters.map(({ character, position }) => ({
       position,
       character: {
@@ -453,6 +494,7 @@ export default class GameController {
     this.stateService.save(state);
   }
 
+  // Загрузка сохраненного состояния
   loadGameState() {
     const savedState = this.stateService.load();
 
@@ -462,7 +504,7 @@ export default class GameController {
     }
     this.reset();
 
-    // Восстановление
+    // Восстановление темы, хода, статуса игры и очков
     this.currentTheme = savedState.currentTheme;
     this.currentTurn = savedState.currentTurn;
     this.gameOver = savedState.gameOver;
@@ -497,23 +539,26 @@ export default class GameController {
       this.characterManager.addCharacter(characterInstance, position);
     });
 
-    // Восстановите выбранных персонажей и активные ячейки
+    // Восстановление выбранных персонажей и активных ячеек
     this.selectedCharacterIndex = savedState.selectedCharacterIndex;
     this.activeSelectCell = savedState.activeSelectCell;
 
-    // Перерисуйте позиции
+    // Перерисовка UI
     this.gamePlay.drawUi(this.currentTheme);
     this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
 
+    // Если ход компьютера, запускаем его
     if (this.currentTurn === TEAM_COMPUTER && !this.gameOver) {
       this.performComputerTurn();
     }
   }
 
+  // Форматирование информации о персонаже для подсказки
   formatCharacterInfo(character) {
     return `🎖${character.level} ⚔${character.attack} 🛡${character.defence} ❤${character.health}`.trim();
   }
 
+  // Создание команд для игрока и компьютера
   createTeams(player, opponent) {
     if (player) {
       const playerPositions =
@@ -537,6 +582,7 @@ export default class GameController {
     this.gamePlay.redrawPositions(this.characterManager.positionedCharacters);
   }
 
+  // Проверка, все ли враги уничтожены и переход на следующий уровень
   checkForLevelUpOrNextLevel() {
     const { computer: enemies } = this.characterManager.getCharactersByTeam(
       this.playerTypes,
@@ -545,7 +591,7 @@ export default class GameController {
 
     if (enemies.length === 0) {
       if(this.currentTheme !== themes.mountain) {
-        // Повысить уровни всех персонажей игрока
+        // Повышение уровней всех персонажей игрока
         this.characterManager.positionedCharacters.forEach((posChar) => {
           if (this.isPlayerCharacter(posChar.character)) {
             this.levelUpCharacter(posChar.character);
@@ -557,6 +603,7 @@ export default class GameController {
     }
   }
 
+  // Повышение уровня персонажа
   levelUpCharacter(character) {
     character.level += 1;
 
@@ -578,48 +625,50 @@ export default class GameController {
     character.health = Math.min(character.health + 80, 100);
   }
 
+  // Переход к следующему уровню
   nextLevel() {
     const keys = Object.keys(themes); // ['prairie', 'desert', 'arctic', 'mountain']
     const currentIndex = keys.indexOf(this.currentTheme);
 
     if (currentIndex === -1 || currentIndex >= keys.length - 1) {
-      // Последняя тема или текущая тема не найдена
+      // Если достигли последней темы, заканчиваем игру победой
       this.endGame(true);
       return;
     }
 
     const nextIndex = currentIndex + 1;
 
-    // Сохраняем текущих персонажей игрок
+    // Сохраняем текущих персонажей игрока
     const currentPlayerCharacters = this.characterManager.positionedCharacters
       .filter((posChar) => this.isPlayerCharacter(posChar.character))
       .map((posChar) => posChar.character);
 
-    // сбрасывам состояние игры
+    // Сброс состояния игры перед сменой темы
     this.reset();
 
-    // Меняем тему в UI
+    // Обновляем тему оформления
     this.currentTheme = keys[nextIndex];
     this.gamePlay.drawUi(themes[this.currentTheme]);
 
-    // Создаем команду игрока, используя сохраненных персонажей сохраняем персонажей на новом поле с новыми позициями
-    const playerPositions =
-      this.positionCalculator.getBorderColumnsIndices('first');
+    // Восстанавливаем команду игрока с сохраненными персонажами на новых позициях
+    const playerPositions = this.positionCalculator.getBorderColumnsIndices('first');
     this.characterManager.assignTeamToPositions(
       currentPlayerCharacters,
       playerPositions
     );
 
-    // Создаем команду компьютера заново
+    // Создаем команду противника заново
     this.createTeams(false, true);
 
+    // Компьютер делает первый ход на новом уровне
     this.performComputerTurn();
   }
 
+  // Окончание игры
   endGame(winner) {
     this.gameOver = true;
 
-    // Подсчет очков за игру (например, сумма уровней всех персонажей игрока)
+    // Подсчет очков (например, сумму уровней)
     const playerCharacters = this.characterManager.positionedCharacters
       .filter(posChar => this.isPlayerCharacter(posChar.character))
       .map(posChar => posChar.character);
@@ -634,11 +683,13 @@ export default class GameController {
     }
   }
 
+  // Старт новой игры
   startNewGame() {
     this.reset();
     this.gamePlay.drawUi(this.currentTheme);
     this.createTeams(true, true);
 
+    // Если ход компьютера, запускаем его
     if (this.currentTurn === TEAM_COMPUTER && !this.gameOver) {
       this.performComputerTurn();
     }

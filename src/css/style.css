@@ -252,3 +252,8 @@ body {
     font-size: 1.5rem;
   }
 }
+
+.highlight-border {
+  outline: 2px dashed rgba(224, 224, 15, 0.541); /* или любой другой стиль */
+  outline-offset: -2px;
+}

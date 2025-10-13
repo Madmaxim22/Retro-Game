@@ -242,4 +242,33 @@ export default class GamePlay {
       throw new Error('GamePlay not bind to DOM');
     }
   }
+
+  highlightRange(centerIndex, range) {
+    this.clearHighlights(); // удаляем предыдущие выделения
+
+    // Вычисляем координаты в сетке
+    const row = Math.floor(centerIndex / this.boardSize);
+    const col = centerIndex % this.boardSize;
+
+    // Определяем границы
+    const minRow = Math.max(0, row - range);
+    const maxRow = Math.min(this.boardSize - 1, row + range);
+    const minCol = Math.max(0, col - range);
+    const maxCol = Math.min(this.boardSize - 1, col + range);
+
+    // Создаем границы (например, с помощью добавления CSS-классов)
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        const index = r * this.boardSize + c;
+        this.cells[index].classList.add('highlight-border');
+      }
+    }
+  }
+
+  clearHighlights() {
+    this.cells.forEach((cell) => {
+      cell.classList.remove('highlight-border');
+    });
+  }
+
 }
