@@ -470,16 +470,18 @@ export default class GameController {
 
   // Сохранение текущего состояния игры
   saveGameState() {
-    const characterPositions = this.characterManager.positionedCharacters.map(({ character, position }) => ({
-      position,
-      character: {
-        type: character.constructor.name,
-        level: character.level,
-        attack: character.attack,
-        defence: character.defence,
-        health: character.health,
-      }
-    }));
+    const characterPositions = this.characterManager.positionedCharacters.map(
+      ({ character, position }) => ({
+        position,
+        character: {
+          type: character.constructor.name,
+          level: character.level,
+          attack: character.attack,
+          defence: character.defence,
+          health: character.health,
+        },
+      })
+    );
 
     const state = new GameState({
       currentTheme: this.currentTheme,
@@ -488,7 +490,7 @@ export default class GameController {
       selectedCharacterIndex: this.selectedCharacterIndex,
       activeSelectCell: this.activeSelectCell,
       gameOver: this.gameOver,
-      maxScore: this.maxScore
+      maxScore: this.maxScore,
     });
 
     this.stateService.save(state);
@@ -515,17 +517,23 @@ export default class GameController {
       let characterInstance;
       switch (character.type) {
       case 'Bowman':
-        characterInstance = new Bowman(character.level); break;
+        characterInstance = new Bowman(character.level);
+        break;
       case 'Vampire':
-        characterInstance = new Vampire(character.level); break;
+        characterInstance = new Vampire(character.level);
+        break;
       case 'Undead':
-        characterInstance = new Undead(character.level); break;
+        characterInstance = new Undead(character.level);
+        break;
       case 'Magician':
-        characterInstance = new Magician(character.level); break;
+        characterInstance = new Magician(character.level);
+        break;
       case 'Daemon':
-        characterInstance = new Daemon(character.level); break;
+        characterInstance = new Daemon(character.level);
+        break;
       case 'Swordsman':
-        characterInstance = new Swordsman(character.level); break;
+        characterInstance = new Swordsman(character.level);
+        break;
       default:
         console.warn(`Неизвестный тип персонажа: ${character.type}`);
         return;
@@ -590,7 +598,7 @@ export default class GameController {
     );
 
     if (enemies.length === 0) {
-      if(this.currentTheme !== themes.mountain) {
+      if (this.currentTheme !== themes.mountain) {
         // Повышение уровней всех персонажей игрока
         this.characterManager.positionedCharacters.forEach((posChar) => {
           if (this.isPlayerCharacter(posChar.character)) {
@@ -651,7 +659,8 @@ export default class GameController {
     this.gamePlay.drawUi(themes[this.currentTheme]);
 
     // Восстанавливаем команду игрока с сохраненными персонажами на новых позициях
-    const playerPositions = this.positionCalculator.getBorderColumnsIndices('first');
+    const playerPositions =
+      this.positionCalculator.getBorderColumnsIndices('first');
     this.characterManager.assignTeamToPositions(
       currentPlayerCharacters,
       playerPositions
@@ -670,8 +679,8 @@ export default class GameController {
 
     // Подсчет очков (например, сумму уровней)
     const playerCharacters = this.characterManager.positionedCharacters
-      .filter(posChar => this.isPlayerCharacter(posChar.character))
-      .map(posChar => posChar.character);
+      .filter((posChar) => this.isPlayerCharacter(posChar.character))
+      .map((posChar) => posChar.character);
 
     const totalScore = playerCharacters.reduce((sum, ch) => sum + ch.level, 0);
     this.maxScore = totalScore;
