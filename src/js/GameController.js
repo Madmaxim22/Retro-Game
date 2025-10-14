@@ -474,7 +474,7 @@ export default class GameController {
       ({ character, position }) => ({
         position,
         character: {
-          type: character.constructor.name,
+          type: character.type,
           level: character.level,
           attack: character.attack,
           defence: character.defence,
@@ -516,22 +516,22 @@ export default class GameController {
     savedState.characterPositions.forEach(({ character, position }) => {
       let characterInstance;
       switch (character.type) {
-      case 'Bowman':
+      case 'bowman':
         characterInstance = new Bowman(character.level);
         break;
-      case 'Vampire':
+      case 'vampire':
         characterInstance = new Vampire(character.level);
         break;
-      case 'Undead':
+      case 'undead':
         characterInstance = new Undead(character.level);
         break;
-      case 'Magician':
+      case 'magician':
         characterInstance = new Magician(character.level);
         break;
-      case 'Daemon':
+      case 'daemon':
         characterInstance = new Daemon(character.level);
         break;
-      case 'Swordsman':
+      case 'swordsman':
         characterInstance = new Swordsman(character.level);
         break;
       default:
