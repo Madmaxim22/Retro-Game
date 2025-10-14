@@ -222,20 +222,20 @@ describe('GameController', () => {
 
     test('getMoveRange() должен возвращать правильный диапазон перемещения', () => {
       // Тестируем логику получения диапазона перемещения
-      expect(gameController.getMoveRange({ constructor: { name: 'Bowman' } })).toBe(2);
-      expect(gameController.getMoveRange({ constructor: { name: 'Swordsman' } })).toBe(4);
-      expect(gameController.getMoveRange({ constructor: { name: 'Magician' } })).toBe(1);
+      expect(gameController.getMoveRange({ type: 'bowman' })).toBe(2);
+      expect(gameController.getMoveRange({ type: 'swordsman' })).toBe(4);
+      expect(gameController.getMoveRange({ type: 'magician' })).toBe(1);
     });
 
     test('getAttackRange() должен возвращать правильный диапазон атаки', () => {
-      expect(gameController.getAttackRange({ constructor: { name: 'Bowman' } })).toBe(2);
-      expect(gameController.getAttackRange({ constructor: { name: 'Swordsman' } })).toBe(1);
-      expect(gameController.getAttackRange({ constructor: { name: 'Magician' } })).toBe(4);
+      expect(gameController.getAttackRange({ type: 'bowman' })).toBe(2);
+      expect(gameController.getAttackRange({ type: 'swordsman' })).toBe(1);
+      expect(gameController.getAttackRange({ type: 'magician' })).toBe(4);
     });
 
     describe('canMoveTo()', () => {
       test('должен возвращать true для допустимого перемещения', () => {
-        const character = { constructor: { name: 'Bowman' } };
+        const character = { type: 'bowman' };
         mockPositionCalculator.calculateDistance.mockReturnValue(2);
         mockCharacterManager.isPositionOccupied.mockReturnValue(false);
 
@@ -245,7 +245,7 @@ describe('GameController', () => {
       });
 
       test('должен возвращать false если позиция занята', () => {
-        const character = { constructor: { name: 'Bowman' } };
+        const character = { type: 'bowman' };
         mockPositionCalculator.calculateDistance.mockReturnValue(1);
         mockCharacterManager.isPositionOccupied.mockReturnValue(true);
 
@@ -255,7 +255,7 @@ describe('GameController', () => {
       });
 
       test('должен возвращать false если расстояние слишком большое', () => {
-        const character = { constructor: { name: 'Bowman' } };
+        const character = { type: 'bowman' };
         mockPositionCalculator.calculateDistance.mockReturnValue(3);
         mockCharacterManager.isPositionOccupied.mockReturnValue(false);
 
@@ -267,7 +267,7 @@ describe('GameController', () => {
 
     describe('canAttack()', () => {
       test('должен возвращать true для допустимой атаки', () => {
-        const character = { constructor: { name: 'Bowman' } };
+        const character = { type: 'bowman' };
         mockPositionCalculator.calculateDistance.mockReturnValue(2);
 
         const result = gameController.canAttack(character, 0, 10);
@@ -276,7 +276,7 @@ describe('GameController', () => {
       });
 
       test('должен возвращать false если расстояние слишком большое', () => {
-        const character = { constructor: { name: 'Bowman' } };
+        const character = { type: 'bowman' };
         mockPositionCalculator.calculateDistance.mockReturnValue(3);
 
         const result = gameController.canAttack(character, 0, 20);

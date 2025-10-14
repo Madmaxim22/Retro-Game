@@ -81,10 +81,10 @@ export default class AIController {
   }
 
   getMoveRange(character) {
-    return RANGE_MAP[character.constructor.name]?.move ?? 1;
+    return RANGE_MAP[character.type]?.move ?? 1;
   }
 
   getAttackRange(character) {
-    return RANGE_MAP[character.constructor.name]?.attack ?? 1;
+    return RANGE_MAP[character.type]?.attack ?? 1;
   }
 }

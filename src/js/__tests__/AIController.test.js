@@ -53,12 +53,14 @@ describe('AIController', () => {
   test('выбирает перемещение, если атака невозможна', () => {
     const compChar = {
       position: 0, character: {
+        type: 'bowman',
         health: 50, constructor: { name: 'Bowman' }
       }
     };
     const enemies = [
       {
         position: 10, character: {
+          type: 'vampire',
           health: 50, constructor: { name: 'Vampire' }
         }
       }
@@ -328,8 +330,8 @@ describe('AIController', () => {
     test('возвращает правильное значение для известных персонажей', () => {
       const ai = new AIController(characterManager, positionCalculator, playerTypes, opponentTypes);
 
-      expect(ai.getMoveRange(new Bowman(1))).toBe(2);
-      expect(ai.getMoveRange(new Swordsman(1))).toBe(4);
+      expect(ai.getMoveRange({ type: 'bowman' })).toBe(2);
+      expect(ai.getMoveRange({ type: 'swordsman' })).toBe(4);
     });
 
     test('возвращает 1 для неизвестных персонажей', () => {
