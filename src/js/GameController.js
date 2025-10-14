@@ -22,27 +22,27 @@ export const ACTION_ATTACK = 'attack';
 export const ACTION_MOVE = 'move';
 
 export const RANGE_MAP = {
-  Swordsman: {
+  swordsman: {
     move: 4,
     attack: 1,
   },
-  Undead: {
+  undead: {
     move: 4,
     attack: 1,
   },
-  Bowman: {
+  bowman: {
     move: 2,
     attack: 2,
   },
-  Vampire: {
+  vampire: {
     move: 2,
     attack: 2,
   },
-  Magician: {
+  magician: {
     move: 1,
     attack: 4,
   },
-  Daemon: {
+  daemon: {
     move: 1,
     attack: 4,
   },
@@ -321,12 +321,12 @@ export default class GameController {
 
   // Получение диапазона перемещения
   getMoveRange(character) {
-    return RANGE_MAP[character.constructor.name]?.move ?? 1;
+    return RANGE_MAP[character.type]?.move ?? 1;
   }
 
   // Получение диапазона атаки
   getAttackRange(character) {
-    return RANGE_MAP[character.constructor.name]?.attack ?? 1;
+    return RANGE_MAP[character.type]?.attack ?? 1;
   }
 
   // Проверка, является ли персонаж игроком
